@@ -1,0 +1,91 @@
+# A simple example of ClusterConfig object:
+---
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: cluster-1
+  region: us-east-1
+  version: "1.18"
+vpc:
+  clusterEndpoints:
+    privateAccess: true
+  nat:
+  # NatGateway is an AWS managed instance that permits Internet traffic from instances sitting in a private subnet inside your VPC. 
+  # NAT Gateway resource and that’s billed 24/7
+    gateway: Disable # other options: Disable, Single (default)
+availabilityZones: ["us-east-1a", "us-east-1b",  "us-east-1d",  "us-east-1f"]    
+nodeGroups:
+##  - name: ng-1
+##    labels: { role: linux-workers } 
+##    minSize: 1
+##    desiredCapacity: 2
+##    maxSize: 3
+##    volumeSize: 30
+##    volumeType: gp2
+#    volumeEncrypted: true
+#    amiFamily: AmazonLinux2
+#    ami: ami-0325958ed6f730dcc  # (optional)
+  #  allowSSH: true
+  #  sshPublicKeyPath: "/c/Users/Admin/.ssh/Public-key_rsa"
+##    iam:
+##      withAddonPolicies:
+##        autoScaler: true
+##    instancesDistribution:
+##     maxPrice: 0.225
+    ### g3s.xlarge - 1GPU NVIDIA Tesla M60              $0.225 per Hour
+    ### p2.xlarge  - 1GPU NVIDIA K80
+    ### p3.2xlarge - 1GPU NVIDIA Tesla V100
+    ### g2.2xlarge - 1 NVIDIA GRID K520 (Kepler) GPU    $0.195 per Hour
+    #instanceTypes: ["p2.xlarge", "g3s.xlarge", "g2.2xlarge", "p3.2xlarge"] # At least one instance type should be specified 
+##     instanceTypes: ["c3.xlarge", "m5.large"]
+##     onDemandBaseCapacity: 0 # The minimum amount of the Auto Scaling group's capacity that must be fulfilled by On-Demand Instances
+#    onDemandPercentageAboveBaseCapacity: 20 # Controls the percentages of On-Demand Instances and Spot Instances for your additional capacity beyond OnDemandBaseCapacity
+##     onDemandPercentageAboveBaseCapacity: 0 # E.g only spot instances
+##     spotInstancePools: 3        
+    
+  - name: 1-gpu-spot-p2-xlarge
+    minSize: 1
+    desiredCapacity: 2
+    maxSize: 3
+    instancesDistribution:
+      # set your own max price. AWS spot instance prices no longer cross OnDemand price. 
+      # Comment out the field to default to OnDemand as max price. 
+      maxPrice: 0.5
+      instanceTypes: ["p2.xlarge","g3s.xlarge"]
+      onDemandBaseCapacity: 0
+      onDemandPercentageAboveBaseCapacity: 0
+      spotAllocationStrategy: capacity-optimized
+    labels:
+      lifecycle: Ec2Spot
+      aws.amazon.com/spot: "true"
+      gpu-count: "1"
+    # Stick to one AZ for all GPU nodes. 
+    # In case of termination, this will prevent volumes from being unavailable 
+    # if the new instance got spun up in another AZ.
+    availabilityZones: ["us-east-1a"]
+  #  taints:
+  #    spotInstance: "true:PreferNoSchedule"
+    tags:
+      k8s.io/cluster-autoscaler/node-template/label/lifecycle: Ec2Spot
+      k8s.io/cluster-autoscaler/node-template/label/aws.amazon.com/spot: "true"
+      k8s.io/cluster-autoscaler/node-template/label/gpu-count: "1"
+  #    k8s.io/cluster-autoscaler/node-template/taint/spotInstance: "true:PreferNoSchedule"
+      k8s.io/cluster-autoscaler/enabled: "true"
+  #    k8s.io/cluster-autoscaler/kubeflow-us-east-1: "owned"
+    iam:
+      withAddonPolicies:
+        autoScaler: true
+        cloudWatch: true
+        ebs: true
+        albIngress: true
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess
+#cloudWatch:
+#    clusterLogging:
+#        # enable specific types of cluster control plane logs
+#        enableTypes: ["audit", "authenticator", "controllerManager"]
+        # all supported types: "api", "audit", "authenticator", "controllerManager", "scheduler"
+        # supported special values: "*" and "all"

@@ -1,0 +1,355 @@
+##########################
+### ProxySQL ConfigMap ###
+##########################
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "proxysql-test"
+  namespace: tp-stg
+data:
+  proxysql.cnf: |-
+    datadir="/var/lib/proxysql"
+
+    ################################
+    ### ProxySQL Admin Variables ###
+    ################################
+    admin_variables=
+    {
+        admin_credentials="admin:admin;operator:operator"
+        # Admin Web interface
+        stats_credentials="stats:stats"
+        web_enabled=true
+        mysql_ifaces="0.0.0.0:6032"
+        refresh_interval=2000
+        cluster_username="operator"
+        cluster_password="operator"
+        cluster_check_interval_ms=200
+        cluster_check_status_frequency=100
+        cluster_mysql_query_rules_save_to_disk=false
+        cluster_mysql_servers_save_to_disk=false
+        cluster_mysql_users_save_to_disk=false
+        cluster_proxysql_servers_save_to_disk=false
+        cluster_mysql_query_rules_diffs_before_sync=1
+        cluster_mysql_servers_diffs_before_sync=1
+        cluster_mysql_users_diffs_before_sync=1
+        cluster_proxysql_servers_diffs_before_sync=1
+    }
+
+    ##############################
+    ### MySQL Global Variables ###
+    ##############################
+    mysql_variables=
+    {
+        threads=4
+        max_connections=1024
+        default_query_delay=0
+        default_query_timeout=6000000
+        have_compress=false
+        poll_timeout=2000
+        interfaces="0.0.0.0:6033;/tmp/proxysql.sock"
+        default_schema="information_schema"
+        stacksize=1048576
+        server_version="5.7.30"
+        connect_timeout_server=3000
+        monitor_username="monitor"
+        monitor_password="monitor"
+        monitor_history=600000
+        monitor_connect_interval=60000
+        monitor_ping_interval=10000
+        monitor_read_only_interval=1500
+        monitor_read_only_timeout=500
+        ping_interval_server_msec=120000
+        ping_timeout_server=500
+        commands_stats=true
+        sessions_sort=true
+        connect_retries_on_failure=10
+        monitor_galera_healthcheck_interval=2000
+        monitor_galera_healthcheck_timeout=800
+    }
+
+    ############################
+    ### ProxySQL Host Groups ###
+    ############################
+    mysql_galera_hostgroups =
+    (
+        # Active hostgroup
+        {
+            writer_hostgroup=10
+            backup_writer_hostgroup=11
+            reader_hostgroup=12
+            offline_hostgroup=9991
+            max_writers=1
+            writer_is_also_reader=0     # The special value writer_is_also_reader=2 signals that only the nodes in backup_writer_hostgroup are also in reader_hostgroup, excluding the node(s) in the writer_hostgroup
+            max_transactions_behind=100 # Default
+            active=1
+        },
+
+        # Reader-only hostgorup
+        {
+            writer_hostgroup=20
+            backup_writer_hostgroup=21
+            reader_hostgroup=22
+            offline_hostgroup=9992
+            max_writers=0
+            writer_is_also_reader=0     # The special value writer_is_also_reader=2 signals that only the nodes in backup_writer_hostgroup are also in reader_hostgroup, excluding the node(s) in the writer_hostgroup
+            max_transactions_behind=100 # Default
+            active=1
+        }
+    )
+
+    ######################
+    ### ProxySQL Rules ###
+    ######################
+    mysql_query_rules =
+    (
+        # Queries with a ^SELECT.* FOR UPDATE pattern should always be served from the writer hostgroup
+        {
+            rule_id=100
+            active=1
+            match_pattern="^SELECT .* FOR UPDATE$"
+            destination_hostgroup=10
+            apply=1
+        },
+
+        # Query processor scans the query rule to find a match for ^SELECT.* pattern and if a match is found, 
+        # proxysql will forward these queries to the reader hostgroup
+        {
+            rule_id=200
+            active=1
+            match_pattern="^SELECT.*"
+            destination_hostgroup=22
+            apply=1
+        }
+    )
+
+    ##########################
+    ### Percona SQL Server ###
+    ##########################
+    mysql_servers =
+    (
+        # Writers group
+        {
+            address="10.1.41.100"
+            port=3306
+            hostgroup=10
+            max_connections=512
+            weight=100
+            comment="Default writer" 
+        },
+        { 
+            address="10.1.51.100"
+            port=3306
+            hostgroup=10
+            max_connections=512
+            weight=10
+            comment="Backup writer"
+        },
+        
+        # Readers group
+        { 
+            address="10.1.41.100"
+            port=3306
+            hostgroup=22
+            max_connections=512
+            weight=30
+            comment="Backup reader"
+        },
+        { 
+            address="10.1.51.100"
+            port=3306
+            hostgroup=22
+            max_connections=512
+            weight=70
+            comment="Default reader"
+        }
+    )
+
+    #########################
+    ### Percona SQL Users ###
+    #########################
+    mysql_users =
+    (
+        { 
+            username = "sbtest"
+            password = "sbtest"
+            default_hostgroup = 10
+            max_connections=1000
+            transaction_persistent = 0
+            fast_forward=0
+            active = 1
+        },
+        {
+            username = "sbtest"
+            password = "sbtest"
+            default_hostgroup = 10
+            max_connections=1000
+            transaction_persistent = 0
+            fast_forward=0
+            active = 1
+        },
+        {
+            username = "sbtest"
+            password = "sbtest"
+            default_hostgroup = 10
+            max_connections=1000
+            transaction_persistent = 0
+            fast_forward=0
+            active = 1
+        },
+        {
+            username = "sbtest"
+            password = "sbtest"
+            default_hostgroup = 10
+            max_connections=1000
+            transaction_persistent = 0
+            fast_forward=0
+            active = 1
+        },
+        {
+            username = "sbtest"
+            password = "sbtest"
+            default_hostgroup = 10
+            max_connections=1000
+            transaction_persistent = 0
+            fast_forward=0
+            active = 1
+        }
+    )
+---
+########################
+### ProxySQL Secrets ###
+########################
+apiVersion: v1
+kind: Secret
+metadata:
+  name: "proxysql-test"
+  namespace: tp-stg
+type: Opaque
+stringData:
+  # Secret environment variables
+  PROXYSQL_ADMIN_USER: "admin" # 'admin'
+  PROXYSQL_ADMIN_PASSWORD: "admin" # 'admin'
+  PROXYSQL_MONITOR_USER: "monitor" # 'monitor'
+  PROXYSQL_MONITOR_PASSWORD: "monitor" # 'monitor'
+  PROXYSQL_CLUSTER_USERNAME: "operator" # 'operator' cluster_username for ProxySQL Cluster
+  PROXYSQL_CLUSTER_PASSWORD: "operator" # 'operator' cluster_password for ProxySQL Cluster
+  PROXYSQL_STATS_USERNAME: "stats" # UI Web access
+  PROXYSQL_STATS_PASSWORD: "stats" # UI Web access
+  MYSQL_API_USER_NAME: "sbtest" # 'sbtest'
+  MYSQL_API_USER_PASSWORD: "sbtest" # 'sbpass'
+  MYSQL_API_RO_USER_NAME: "sbtest" # 'sbtest'
+  MYSQL_API_RO_USER_PASSWORD: "sbtest" # 'sbpass'
+  MYSQL_KEYCLOAK_USER_NAME: "sbtest" # 'sbtest'
+  MYSQL_KEYCLOAK_USER_PASSWORD: "sbtest" # 'sbpass'
+  MYSQL_QTEST_USER_NAME: "sbtest" # 'sbtest'
+  MYSQL_QTEST_USER_PASSWORD: "sbtest" # 'sbpass'
+  MYSQL_MATOMO_USER_NAME: sbtest # 'sbtest'
+  MYSQL_MATOMO_USER_PASSWORD: sbtest # 'sbpass'
+---
+###########################
+### ProxySQL SatefulSet ###
+###########################
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: "proxysql-test"
+  namespace: tp-stg
+  labels:
+    app: "proxysql-test"
+  annotations:
+    commit_sha: "12345678"
+spec:
+  replicas: 1
+  serviceName: "proxysql-test"
+  selector:
+    matchLabels:
+      app: "proxysql-test"
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: "proxysql-test"
+    spec:
+      restartPolicy: Always
+      containers:
+        - image: percona/proxysql:2.0.15
+          name: proxysql
+          volumeMounts:
+            - name: proxysql-config
+              mountPath: /etc/proxysql/proxysql.cnf
+              subPath: proxysql.cnf
+              readOnly: true
+          ports:
+            - containerPort: 6033
+              name: mysql
+            - containerPort: 6032
+              name: proxysql-admin
+            - containerPort: 6080
+              name: proxysql-stats
+      volumes:
+        - name: proxysql-config
+          configMap:
+            name: "proxysql-test"
+---
+########################
+### ProxySQL Service ###
+########################
+apiVersion: v1
+kind: Service
+metadata:
+  name: "proxysql-test"
+  namespace: tp-stg
+  labels:
+    app: "proxysql-test"
+spec:
+  ports:
+    - name: mysql
+      protocol: TCP
+      port: 6033
+      targetPort: 6033
+    - name: proxysql-admin
+      protocol: TCP
+      port: 6032
+      targetPort: 6032
+    - name: proxysql-web
+      protocol: TCP
+      port: 6080
+      targetPort: 6080
+  selector:
+    app: "proxysql-test"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "proxysqlcluster"
+  namespace: tp-stg
+  labels:
+    app: "proxysql-test"
+spec:
+  ports:
+  - port: 6032
+    name: proxysql-admin
+  selector:
+    app: "proxysql-test"  
+---
+########################
+### Internal Ingress ###
+########################
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: "proxysql-test"
+  namespace: tp-stg
+  annotations:
+    kubernetes.io/ingress.class: "nginx-stg"
+    ingress.kubernetes.io/whitelist-source-range: "10.9.0.0/16,10.8.0.0/16"
+spec:
+  rules:
+    - host: "proxysql-test.stg.tp.local"
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: "proxysql-test"
+              servicePort: 6080

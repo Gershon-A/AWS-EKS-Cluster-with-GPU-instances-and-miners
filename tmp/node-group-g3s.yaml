@@ -1,0 +1,29 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: cluster-1
+  region: us-east-1
+  #version: "1.18"
+  #version: "1.17"
+
+nodeGroups:
+  - name: gpu-spot-g3s
+    minSize: 1
+    desiredCapacity: 2
+    maxSize: 3
+    instancesDistribution:
+      # set your own max price. AWS spot instance prices no longer cross OnDemand price. 
+      # Comment out the field to default to OnDemand as max price. 
+      maxPrice: 0.5
+      instanceTypes: ["g3s.xlarge"]
+#      instanceTypes: ["p2.xlarge"]
+#      instanceTypes: ["t4g.small","t4g.nano", "t4g.micro"]
+      onDemandBaseCapacity: 0
+      onDemandPercentageAboveBaseCapacity: 0
+      spotAllocationStrategy: capacity-optimized
+    labels:
+      lifecycle: Ec2Spot
+      aws.amazon.com/spot: "true"
+      gpu-count: "1" 
+    amiFamily: AmazonLinux2           

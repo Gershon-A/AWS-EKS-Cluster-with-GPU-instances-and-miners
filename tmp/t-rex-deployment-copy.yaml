@@ -1,0 +1,149 @@
+##########################
+### t-rex ConfigMap ###
+##########################
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "t-rex-configmap"
+data:
+  entrypoint.sh: |-
+   #/bin/bash
+    echo $HOSTNAME
+    printenv
+#   ./t-rex -o stratum+tcp://xzc.2miners.com:8080 --algo mtp --pass x --user a25MXWYXhhDzbnj2KRp89mC5pKr6b8SZpq.solo-xzc
+#   ./t-rex --algo mtp -o stratum+tcp://xzc.2miners.com:8080 -u YOUR_ADDRESS.RIG_ID -p x
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: static-files
+data:
+  index.html: |
+    <html><head><title>End of the Internet</title></head>
+    <body><h1>The End of the Internet</h1>
+    <p>You have reached the end of the Internet.
+    Feel free to go outside now.</p>
+    </body></html>
+    
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: t-rex
+##  annotations:
+##    commit_sha: "51e23ad8" 
+spec:
+  strategy:
+    type: RollingUpdate
+  # Replicas controls the number of instances of the Pod to maintain running at all times
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: t-rex
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: t-rex      
+    spec:  
+      containers:
+        - name: cuda-t-rex
+          #image: cryptojunkies/ethminer:latest-cuda9.2
+          image: gershona/cuda-t-rex:v1
+         # image:  cryptoandcoffee/nvidia-docker-t-rex-c10:latest
+          env:
+          - name: WORKER_NAME
+            value: "Gershon-t-rex"
+          - name: WALLET
+            value: "0x1Fa418c70C5f14b21D00c242Bf369A875F129d12"
+          - name: POOL
+            value: "us1.ethermine.org:5555"
+          command:
+            - /bin/sh
+            - /root/entrypoint.sh
+#          command: [ "./entrypoint.sh" ]            
+#          command: ["/entrypoint.sh", "/bin/sh", "/entrypoint-ex.sh"]    
+#          command: ["bin/bash", "-c", "./entrypoint.sh"]
+#          command: ["/entrypoint.sh", "/bin/sh"] 
+#          args: ["./t-rex", "-a mtp -o stratum+tcp://zcoin.woolypooly.com:3080 -u a25MXWYXhhDzbnj2KRp89mC5pKr6b8SZpq.rig0 -p x "] 
+          ports:
+            - name: api
+              containerPort: 4067
+              protocol: TCP
+          volumeMounts:
+          - name: static-files
+            mountPath: /usr/share/nginx/html
+          resources:
+##            requests:
+#              cpu: 500m # The CPU unit is mili-cores. 500m is 0.5 cores
+##              cpu: 250m # The CPU unit is mili-cores. 250m is 0.25 cores
+##              memory: 64Mi
+            limits:
+            #  cpu: 2000m
+              cpu: 1000m # 1000m is 1 core
+              memory: 512Mi
+#          readinessProbe:
+#            tcpSocket:
+#              port: 3333
+#            initialDelaySeconds: 5
+#            periodSeconds: 10
+#         livenessProbe:
+#            tcpSocket:
+#             port: 3333
+#            initialDelaySeconds: 5
+#           periodSeconds: 10
+
+#          resources:
+##            requests:
+#              cpu: 500m # The CPU unit is mili-cores. 500m is 0.5 cores
+##              cpu: 250m # The CPU unit is mili-cores. 250m is 0.25 cores
+##              memory: 64Mi
+#            limits:
+            #  cpu: 2000m
+#              cpu: 1000m # 1000m is 1 core
+#              memory: 512Mi
+              # GPUs can only be allocated as a limit, which both reserves and limits the number of GPUs the Pod will have access to
+              # Making individual Pods resource light is advantageous for bin-packing. In the case of Ethminer, running a single GPU
+              # per Pod would work well and often be preferred. 
+              # In case we have 2 GPUs change nvidia.com/gpu: 2 possible gain more performance
+              # nvidia.com/gpu: 1
+
+##     affinity:
+##       nodeAffinity:
+##         requiredDuringSchedulingIgnoredDuringExecution:
+##           nodeSelectorTerms:
+##           - matchExpressions:
+##             - key: beta.kubernetes.io/instance-type
+##               operator: In
+##               values:
+##               - g4dn.xlarge
+##       podAntiAffinity:
+##         requiredDuringSchedulingIgnoredDuringExecution:
+##         - labelSelector:
+##             matchExpressions:
+##             - key: workgroup
+##               operator: In
+##               values:
+##               - g4dn-xlarge
+##           topologyKey: "kubernetes.io/hostname"                
+          # As mining doesn't require much CPU and very little network connectivity, we try to play nice and only schedule
+          # the Pod on systems with Celeron family CPUs and 1G network connections. This is a preference, not a requirement.
+          # If systems with Celeron CPUs and/or 1G ethernet are not available to fulfill the requested resources, the Pods
+          # will be scheduled on higher end systems.
+#          preferredDuringSchedulingIgnoredDuringExecution:
+#            - weight: 10
+#              preference:
+#                matchExpressions:
+#                - key: cpu.coreweave.cloud/family
+#                  operator: In
+#                  values:
+#                    - celeron
+#            - weight: 10
+#              preference:
+#                matchExpressions:
+#                - key: ethernet.coreweave.cloud/speed
+#                  operator: In
+#                  values:
+#                    - 1G
+
+      restartPolicy: Always

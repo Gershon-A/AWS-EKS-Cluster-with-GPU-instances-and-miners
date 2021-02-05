@@ -1,0 +1,77 @@
+# Cost-Optimized EKS cluster for Kubeflow with spot GPU instances and node scale down to zero
+# Built in efforts to reducing training costs of ML workloads.
+# Supporting tutorial can be found at the following link: 
+# https://blog.gofynd.com/how-we-reduced-our-ml-training-costs-by-78-a33805cb00cf
+# This spec creates a cluster on EKS with the following active nodes 
+# - 2x m5a.2xlarge - Accomodates all pods of Kubeflow
+# It also creates the following nodegroups with 0 nodes running unless a pod comes along and requests for the node to get spun up
+# - m5a.2xlarge   -- Max Allowed 10 worker nodes
+# - p2.xlarge     -- Max Allowed 10 worker nodes
+# - p3.2xlarge    -- Max Allowed 10 worker nodes
+# - p3.8xlarge    -- Max Allowed 04 worker nodes
+# - p3dn.24xlarge -- Max Allowed 01 worker nodes
+
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  # Name of your cluster, change to whatever you find fit.
+  # If changed, make sure to change all nodegroup tags from 
+  # 'k8s.io/cluster-autoscaler/kubeflow-us-east-1: "owned"' --> 'k8s.io/cluster-autoscaler/your-new-name: "owned"'
+  name: gershon-mining-1
+  # choose your region wisely, this will significantly impact the cost incurred
+  region: us-east-1
+  # 1.14 Kubernetes version since Kubeflow 1.0 officially supports the same
+  version: '1.18'
+  tags:
+    # Add more cloud tags if needed for billing
+    environment: staging
+vpc:
+#  cidr: 10.1.0.0/16
+  nat:
+  # NatGateway is an AWS managed instance that permits Internet traffic from instances sitting in a private subnet inside your VPC. 
+  # NAT Gateway resource and that’s billed 24/7
+    gateway: Disable # other options: Disable, Single (default)
+# Add all possible AZs to ensure nodes can be spun up in any AZ later on. 
+# THIS CAN'T BE CHANGED LATER. YOU WILL HAVE TO CREATE A NEW CLUSTER TO ADD NEW AZ SUPPORT.
+# This list applies to the whole clustr and isn't specific to nodegroups
+#availabilityZones: ["us-east-1a", "us-east-1b",  "us-east-1d",  "us-east-1f"]
+availabilityZones: ["us-east-1a", "us-east-1b"]
+
+nodeGroups:
+  - name: 1-gpu-spot-p2-xlarge
+    minSize: 1
+    desiredCapacity: 2
+    maxSize: 3
+    instancesDistribution:
+      # set your own max price. AWS spot instance prices no longer cross OnDemand price. 
+      # Comment out the field to default to OnDemand as max price. 
+      maxPrice: 0.225
+      instanceTypes: ["p2.xlarge", "g3s.xlarge", "g2.2xlarge", "p3.2xlarge"] # At least one instance type should be specified
+      onDemandBaseCapacity: 0
+      onDemandPercentageAboveBaseCapacity: 0
+      spotAllocationStrategy: capacity-optimized
+    labels:
+      lifecycle: Ec2Spot
+      aws.amazon.com/spot: "true"
+      gpu-count: "1"
+    # Stick to one AZ for all GPU nodes. 
+    # In case of termination, this will prevent volumes from being unavailable 
+    # if the new instance got spun up in another AZ.
+    #availabilityZones: ["us-east-1a"]
+    amiFamily: AmazonLinux2
+    # ami: ami-0325958ed6f730dcc  # (optional)
+    taints:
+      spotInstance: "true:PreferNoSchedule"
+    tags:
+      k8s.io/cluster-autoscaler/node-template/label/lifecycle: Ec2Spot
+      k8s.io/cluster-autoscaler/node-template/label/aws.amazon.com/spot: "true"
+      k8s.io/cluster-autoscaler/node-template/label/gpu-count: "1"
+      k8s.io/cluster-autoscaler/node-template/taint/spotInstance: "true:PreferNoSchedule"
+      k8s.io/cluster-autoscaler/enabled: "true"
+      k8s.io/cluster-autoscaler/gershon-mining-1: "owned"
+    iam:
+      withAddonPolicies:
+        autoScaler: true
+        cloudWatch: true
+        albIngress: true
